@@ -221,7 +221,106 @@ jobs:
           retention-days: 7
 
   # =========================================================================
-  # 6. GitHub Release (triggered by workflow_dispatch with version)
+  # 6. Clock GUI App — Cross-Platform Build
+  # =========================================================================
+  build-clock-windows:
+    name: 🪟 Clock — Windows
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64]
+    defaults:
+      run:
+        working-directory: ./clock
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Clock (Windows ${{ matrix.arch }})
+        run: |
+          GOOS=windows GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w" \
+            -o ../dist/ci-demo-clock-windows-${{ matrix.arch }}.exe \
+            ./main.go
+
+      - name: Upload artifact (Clock Windows ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock-windows-${{ matrix.arch }}
+          path: dist/ci-demo-clock-windows-${{ matrix.arch }}.exe
+          retention-days: 7
+
+  build-clock-linux:
+    name: 🐧 Clock — Linux
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64]
+    defaults:
+      run:
+        working-directory: ./clock
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Clock (Linux ${{ matrix.arch }})
+        run: |
+          GOOS=linux GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w" \
+            -o ../dist/ci-demo-clock-linux-${{ matrix.arch }} \
+            ./main.go
+
+      - name: Upload artifact (Clock Linux ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock-linux-${{ matrix.arch }}
+          path: dist/ci-demo-clock-linux-${{ matrix.arch }}
+          retention-days: 7
+
+  build-clock-macos:
+    name: 🍎 Clock — macOS
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: ./clock
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Clock (macOS ${{ matrix.arch }})
+        run: |
+          GOOS=darwin GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w" \
+            -o ../dist/ci-demo-clock-macos-${{ matrix.arch }} \
+            ./main.go
+
+      - name: Upload artifact (Clock macOS ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock-macos-${{ matrix.arch }}
+          path: dist/ci-demo-clock-macos-${{ matrix.arch }}
+          retention-days: 7
+
+  # =========================================================================
+  # 7. GitHub Release (triggered by workflow_dispatch with version)
   # =========================================================================
   release:
     name: 📦 Create GitHub Release
@@ -230,6 +329,9 @@ jobs:
       - build-linux
       - build-macos
       - build-android
+      - build-clock-windows
+      - build-clock-linux
+      - build-clock-macos
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_version != ''
     runs-on: ubuntu-latest
     permissions:
@@ -257,13 +359,18 @@ jobs:
 
             Automated multi-platform build via GitHub Actions.
 
-            ### Artifacts
+            ### CLI Artifacts
             | Platform | Architectures |
             |----------|--------------|
             | 🪟 Windows | amd64, arm64 |
             | 🐧 Linux | amd64, arm64 |
             | 🍎 macOS | amd64, arm64 (Apple Silicon) |
             | 🤖 Android | APK (debug + release) |
+
+            ### Clock GUI App
+            | 🪟 Windows | amd64 |
+            | 🐧 Linux | amd64 |
+            | 🍎 macOS | amd64, arm64 |
 
             **Commit:** ${{ github.sha }}
             **Build Date:** ${{ github.event.repository.updated_at }}
