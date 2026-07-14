@@ -1,0 +1,282 @@
+# ============================================================================
+# CI Multi-Platform Build Pipeline
+# Builds for: Windows (x64, arm64), Linux (x64, arm64), macOS (x64, arm64), Android (APK)
+#
+# Triggers:
+#   - Push to main/master branch
+#   - Pull Request targeting main/master
+#   - Manual trigger (workflow_dispatch)
+# ============================================================================
+
+name: 🚀 Multi-Platform CI Build
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version tag (e.g., v1.0.0)"
+        required: false
+        default: ""
+
+env:
+  GO_VERSION: "1.21"
+  APP_NAME: ci-demo
+  # Android
+  JAVA_VERSION: "17"
+  ANDROID_COMPILE_SDK: "34"
+  ANDROID_BUILD_TOOLS: "34.0.0"
+
+# ============================================================================
+# Jobs
+# ============================================================================
+jobs:
+  # =========================================================================
+  # 1. Static Analysis & Lint (runs once, gates all builds)
+  # =========================================================================
+  lint:
+    name: 🔍 Lint & Vet (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go fmt check
+        run: |
+          fmt_output=$(gofmt -l .)
+          if [ -n "$fmt_output" ]; then
+            echo "❌ The following files need formatting:"
+            echo "$fmt_output"
+            exit 1
+          fi
+          echo "✅ All files properly formatted"
+
+      - name: Run tests
+        run: go test ./... -v -race
+
+  # =========================================================================
+  # 2. Go Cross-Compile — Windows (amd64 + arm64)
+  # =========================================================================
+  build-windows:
+    name: 🪟 Windows Build
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Windows (${{ matrix.arch }})
+        run: |
+          GOOS=windows GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w -X main.Version=${{ github.sha }}" \
+            -o ../dist/${{ env.APP_NAME }}-windows-${{ matrix.arch }}.exe \
+            ./main.go
+
+      - name: Upload artifact (Windows ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/${{ env.APP_NAME }}-windows-${{ matrix.arch }}.exe
+          retention-days: 7
+
+  # =========================================================================
+  # 3. Go Cross-Compile — Linux (amd64 + arm64)
+  # =========================================================================
+  build-linux:
+    name: 🐧 Linux Build
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Linux (${{ matrix.arch }})
+        run: |
+          GOOS=linux GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w -X main.Version=${{ github.sha }}" \
+            -o ../dist/${{ env.APP_NAME }}-linux-${{ matrix.arch }} \
+            ./main.go
+
+      - name: Upload artifact (Linux ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/${{ env.APP_NAME }}-linux-${{ matrix.arch }}
+          retention-days: 7
+
+  # =========================================================================
+  # 4. Go Cross-Compile — macOS (amd64 + arm64/Apple Silicon)
+  # =========================================================================
+  build-macos:
+    name: 🍎 macOS Build
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build macOS (${{ matrix.arch }})
+        run: |
+          GOOS=darwin GOARCH=${{ matrix.arch }} go build \
+            -ldflags="-s -w -X main.Version=${{ github.sha }}" \
+            -o ../dist/${{ env.APP_NAME }}-macos-${{ matrix.arch }} \
+            ./main.go
+
+      - name: Upload artifact (macOS ${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: dist/${{ env.APP_NAME }}-macos-${{ matrix.arch }}
+          retention-days: 7
+
+  # =========================================================================
+  # 5. Android APK Build
+  # =========================================================================
+  build-android:
+    name: 🤖 Android APK Build
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-${{ env.ANDROID_COMPILE_SDK }} build-tools;${{ env.ANDROID_BUILD_TOOLS }}"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Android APK (Debug)
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Android APK (Release)
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
+          retention-days: 7
+
+  # =========================================================================
+  # 6. GitHub Release (triggered by workflow_dispatch with version)
+  # =========================================================================
+  release:
+    name: 📦 Create GitHub Release
+    needs:
+      - build-windows
+      - build-linux
+      - build-macos
+      - build-android
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release_version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-artifacts
+          merge-multiple: false
+
+      - name: Display artifact structure
+        run: |
+          echo "=== Release Artifacts ==="
+          find ./release-artifacts -type f | sort
+          echo "========================="
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_version }}
+          name: Release ${{ github.event.inputs.release_version }}
+          body: |
+            ## 🚀 Release ${{ github.event.inputs.release_version }}
+
+            Automated multi-platform build via GitHub Actions.
+
+            ### Artifacts
+            | Platform | Architectures |
+            |----------|--------------|
+            | 🪟 Windows | amd64, arm64 |
+            | 🐧 Linux | amd64, arm64 |
+            | 🍎 macOS | amd64, arm64 (Apple Silicon) |
+            | 🤖 Android | APK (debug + release) |
+
+            **Commit:** ${{ github.sha }}
+            **Build Date:** ${{ github.event.repository.updated_at }}
+          files: |
+            release-artifacts/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
