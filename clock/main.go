@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	a := app.New()
+	a := app.NewWithID("com.demo.ci-demo-clock")
 	a.Settings().SetTheme(theme.LightTheme())
 
 	w := a.NewWindow("Circle Clock")
