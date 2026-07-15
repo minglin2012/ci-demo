@@ -221,15 +221,12 @@ jobs:
           retention-days: 7
 
   # =========================================================================
-  # 6. Clock GUI App — Cross-Platform Build
+  # 6. Clock GUI App — Native Builds (Fyne requires CGO, no cross-compile)
   # =========================================================================
   build-clock-windows:
     name: 🪟 Clock — Windows
     needs: lint
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64]
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: ./clock
@@ -241,27 +238,21 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Build Clock (Windows ${{ matrix.arch }})
+      - name: Build Clock (Windows)
         run: |
-          GOOS=windows GOARCH=${{ matrix.arch }} go build \
-            -ldflags="-s -w" \
-            -o ../dist/ci-demo-clock-windows-${{ matrix.arch }}.exe \
-            ./main.go
+          go build -ldflags="-s -w" -o ../dist/ci-demo-clock-windows-amd64.exe ./main.go
 
-      - name: Upload artifact (Clock Windows ${{ matrix.arch }})
+      - name: Upload artifact (Clock Windows)
         uses: actions/upload-artifact@v4
         with:
-          name: clock-windows-${{ matrix.arch }}
-          path: dist/ci-demo-clock-windows-${{ matrix.arch }}.exe
+          name: clock-windows-amd64
+          path: dist/ci-demo-clock-windows-amd64.exe
           retention-days: 7
 
   build-clock-linux:
     name: 🐧 Clock — Linux
     needs: lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64]
     defaults:
       run:
         working-directory: ./clock
@@ -273,27 +264,26 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Build Clock (Linux ${{ matrix.arch }})
+      - name: Install system dependencies for Fyne (OpenGL)
         run: |
-          GOOS=linux GOARCH=${{ matrix.arch }} go build \
-            -ldflags="-s -w" \
-            -o ../dist/ci-demo-clock-linux-${{ matrix.arch }} \
-            ./main.go
+          sudo apt-get update -y
+          sudo apt-get install -y libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev xorg-dev
 
-      - name: Upload artifact (Clock Linux ${{ matrix.arch }})
+      - name: Build Clock (Linux)
+        run: |
+          go build -ldflags="-s -w" -o ../dist/ci-demo-clock-linux-amd64 ./main.go
+
+      - name: Upload artifact (Clock Linux)
         uses: actions/upload-artifact@v4
         with:
-          name: clock-linux-${{ matrix.arch }}
-          path: dist/ci-demo-clock-linux-${{ matrix.arch }}
+          name: clock-linux-amd64
+          path: dist/ci-demo-clock-linux-amd64
           retention-days: 7
 
   build-clock-macos:
     name: 🍎 Clock — macOS
     needs: lint
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: ./clock
@@ -305,18 +295,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Build Clock (macOS ${{ matrix.arch }})
+      - name: Build Clock (macOS)
         run: |
-          GOOS=darwin GOARCH=${{ matrix.arch }} go build \
-            -ldflags="-s -w" \
-            -o ../dist/ci-demo-clock-macos-${{ matrix.arch }} \
-            ./main.go
+          go build -ldflags="-s -w" -o ../dist/ci-demo-clock-macos-arm64 ./main.go
 
-      - name: Upload artifact (Clock macOS ${{ matrix.arch }})
+      - name: Upload artifact (Clock macOS)
         uses: actions/upload-artifact@v4
         with:
-          name: clock-macos-${{ matrix.arch }}
-          path: dist/ci-demo-clock-macos-${{ matrix.arch }}
+          name: clock-macos-arm64
+          path: dist/ci-demo-clock-macos-arm64
           retention-days: 7
 
   # =========================================================================
@@ -370,7 +357,7 @@ jobs:
             ### Clock GUI App
             | 🪟 Windows | amd64 |
             | 🐧 Linux | amd64 |
-            | 🍎 macOS | amd64, arm64 |
+            | 🍎 macOS | arm64 (Apple Silicon) |
 
             **Commit:** ${{ github.sha }}
             **Build Date:** ${{ github.event.repository.updated_at }}
