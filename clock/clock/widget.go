@@ -40,11 +40,12 @@ func NewClockWidget() *ClockWidget {
 	c.ExtendBaseWidget(c)
 
 	// Start the ticker to refresh every second.
+	// fyne.Do schedules the callback on the main goroutine for UI updates.
 	c.ticker = time.NewTicker(time.Second)
 	go func() {
 		for t := range c.ticker.C {
 			c.current = t
-			fyne.Do(c.Refresh)
+			fyne.Do(func() { c.Refresh() })
 		}
 	}()
 
@@ -77,7 +78,7 @@ func (c *ClockWidget) MinSize() fyne.Size {
 type clockRenderer struct {
 	clock *ClockWidget
 
-	// canvas objects — rebuilt on each refresh
+	// canvas objects
 	faceCircle *canvas.Circle
 	ticks      []*canvas.Line
 	hourHand   *canvas.Line
@@ -117,7 +118,7 @@ func (r *clockRenderer) buildObjects() {
 		r.ticks[i] = line
 	}
 
-	// --- hands (positions will be updated each frame) ---
+	// --- hands (positions updated each frame) ---
 	r.hourHand = canvas.NewLine(color.Black)
 	r.hourHand.StrokeWidth = float32(hourHandWidth)
 
@@ -166,6 +167,11 @@ func (r *clockRenderer) updateHands() {
 	sy := cy - float32(secondHandLength*math.Cos(sRad))
 	r.secondHand.Position1 = fyne.NewPos(cx, cy)
 	r.secondHand.Position2 = fyne.NewPos(sx, sy)
+
+	// Notify canvas that hand positions changed — required for Fyne to redraw.
+	canvas.Refresh(r.hourHand)
+	canvas.Refresh(r.minuteHand)
+	canvas.Refresh(r.secondHand)
 }
 
 func (r *clockRenderer) Layout(size fyne.Size) {
