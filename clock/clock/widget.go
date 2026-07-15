@@ -44,7 +44,7 @@ func NewClockWidget() *ClockWidget {
 	go func() {
 		for t := range c.ticker.C {
 			c.current = t
-			c.Refresh()
+			fyne.Do(c.Refresh)
 		}
 	}()
 
